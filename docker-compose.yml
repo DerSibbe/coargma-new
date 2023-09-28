@@ -9,4 +9,4 @@ services:
     build: ./coargma-demo
     container_name: coargma_frontend
     ports:
-      - "15556:15556"
+      - "15556:3000"
