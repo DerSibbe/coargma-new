@@ -1,0 +1,6 @@
+[submodule "coargma-backend"]
+	path = coargma-backend
+	url = https://github.com/DerSibbe/coargma-backend.git
+[submodule "coargma-demo"]
+	path = coargma-demo
+	url = https://github.com/lilaspourpre/coargma-demo.git
