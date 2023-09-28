@@ -1,6 +1,8 @@
 import requests
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from string import punctuation
+from collections import defaultdict, OrderedDict
 
 #for question classification
 model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
@@ -10,15 +12,7 @@ tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_questio
 model_checkpoint = "lilaspourpre/rubert-tiny-obj-asp"
 token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
 
-#english, keeping russian as default for now
-#for question classification
-#model = AutoModelForSequenceClassification.from_pretrained("uhhlt/roberta-binary-classifier", num_labels=2)
-#tokenizer = AutoTokenizer.from_pretrained('uhhlt/roberta-binary-classifier')
-#for obj/asp extraction
-#model_checkpoint = "uhhlt/model-obj-asp-en"
-#token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
-
-def classify_input(question: str) -> bool:
+def classify_input_ru(question: str) -> bool:
     inputs = tokenizer(question, return_tensors="pt")
     with torch.no_grad():
         logits = model(**inputs).logits
@@ -33,25 +27,46 @@ def classify_input(question: str) -> bool:
 
 # param: question: str; natural language comparative question
 # return: tuple(str, str, str), two objects and comparative aspects of the question
-def extract_objs_asp(question: str):# -> tuple(str, str, str):
+
+def extract_objs_asp_ru(question: str):
     # 1.: Classify question as comparative or non comparative
-    if classify_input(question) == True:
+    if classify_input_ru(question) == True:
         # 2.: If comparative, extract objects and aspects
         labeled_tokens = [[entry['entity_group'], entry['word']] for entry in token_classifier(question)]
-        objs = [entry[1].strip() for entry in labeled_tokens if entry[0] == "OBJ"]
-        if len(objs) < 2:
+        labeled_tokens_dict = postprocess_obj_asp(question, labeled_tokens)
+        objs = [labeled_tokens_dict["Object1"], labeled_tokens_dict["Object2"]]
+        if "" in objs:
             #question was falsely identified as comparative but only contains one or zero objects
             return "", "", ""
-        if len(objs) > 2:
-            #too many objects, for the sake of this task only take the first two
-            objs = objs[0:2]
-        asp = [entry[1] for entry in labeled_tokens if entry[0] in ["PRED", "ASP"]][0].strip()
-        #problem with asp: things like "more stable" are split into "PRED more" and "ASP stable" --> asp = "more"
-        #maybe solution:
-        if asp == 'more':
-            asp = 'more' + [entry[1] for entry in labeled_tokens if entry[0] in ["PRED", "ASP"]][1]    
+        asp = labeled_tokens_dict["Aspect"]
         return objs[0], objs[1], asp
     return "", "", ""
+
+def postprocess_obj_asp(question, model_output):
+    labelled_words = {"Aspect": "", "CommonObj": "", "Object1": "", "Object2": ""}
+    question_words = [i.strip(punctuation) for i in question.split()]
+
+    for label, word_part in model_output:
+        if word_part.startswith("##"):
+            labelled_words[label] += word_part.strip("##")
+        else:
+            if labelled_words[label]=="":
+                labelled_words[label] += word_part
+            else:
+                labelled_words[label] += " "
+                labelled_words[label] += word_part
+    
+    final = defaultdict(OrderedDict)
+
+    for label, words in labelled_words.items():
+        for word in words.split():
+            for q_word in question_words:
+                if q_word.startswith(word):
+                    final[label][q_word]=''
+    
+    final_dict = dict([(i, " ".join(j.keys())) for (i,j) in final.items()])
+
+    return final_dict
 
 # 3.2 given objects and aspect make a request to CAM and select 20 arguments with links (top-10 for each object) (I have code for that, here
 # is the link to colab (but no links are returned there): https://colab.research.google.com/drive/1X3zflENMNFSegxM-N5IQ3z-oIeDHJ-4c?usp=sharing
@@ -60,7 +75,7 @@ def extract_objs_asp(question: str):# -> tuple(str, str, str):
 
 # param: obj1: str, obj2: str, aspect: str; two objects and one comparative aspect
 # return: tuple[dict, list[tuple[str, str]]]; dict with winner data (object and percentage), list with arguments and links for both objects
-def extract_data_from_CAM(obj1: str, obj2: str, aspect: str) -> tuple[dict, list[tuple[str, str]]]:
+def extract_data_from_CAM_ru(obj1: str, obj2: str, aspect: str) -> tuple[dict, list[tuple[str, str]]]: #to be edited
     lt = "ltdemos.informatik.uni-hamburg.de"
     if aspect == "":
         address = f"http://{lt}/cam-api/cam?model=default&fs=false&objectA={obj1}&objectB={obj2}"
@@ -97,7 +112,7 @@ def extract_data_from_CAM(obj1: str, obj2: str, aspect: str) -> tuple[dict, list
 
 # param: obj1: str, obj2: str, aspect: str, arguments: list[str]; objects, comparative aspect and list of arguments for either object
 # return: str; template input text as used for ChatGPT asking for a comparison of obj1 and obj2 with a list of args
-def create_template(obj1: str, obj2: str, aspect: str, arguments: list[str]) -> str:
+def create_template_ru(obj1: str, obj2: str, aspect: str, arguments: list[str]) -> str:
     template_with_text = "Write a comparison of \""+obj1+"\" and \""+obj2+"\". Summarize only relevant arguments from the list.\n\n"\
         +"\n".join(arguments)+\
         "\n\nAfter the summary, list the arguments you used below the text. Put citations in brackets inside the text. Do not even mention "\
@@ -109,7 +124,7 @@ def create_template(obj1: str, obj2: str, aspect: str, arguments: list[str]) -> 
 
 # param: text: str; text asking for a comparison of two objects under a list of arguments (see create_template())
 # return: str; comparison of aforementioned objects using the list of arguments
-def predict_summary(text: str) -> str:
+def predict_summary_ru(text: str) -> str:
     #TODO include fine-tuned model, currently only returning one hard coded summary
     summary = "Georgia and Virginia are two states in the United States, with their own unique characteristics and qualities. \n\nSome "\
         "arguments mention that Georgia is probably better than Virginia Tech [1], has a relatively freer political climate [5][9], and"\
@@ -128,7 +143,7 @@ def predict_summary(text: str) -> str:
 #        with corresponding links 
 # return: tuple[str, list[tuple[str, str]]]; Summary with args renumbered from 1 to number of args used, and list of args with corresponding
 #        links stripped of unused args
-def correct_summary_and_links(summary: str, args_with_links: list[tuple[str, str]]) -> tuple[str, list[tuple[str, str]]]:
+def correct_summary_and_links_ru(summary: str, args_with_links: list[tuple[str, str]]) -> tuple[str, list[tuple[str, str]]]:
     improved_summary = summary
     improved_args_with_links = []
     args_used = summary.split("\n\n")[-1].replace(".", "").split(": ")[1].split(", ")
@@ -147,20 +162,20 @@ def correct_summary_and_links(summary: str, args_with_links: list[tuple[str, str
 
 # 3.6 the whole pipeline that accepts obj1, obj2 and returns the summary, percentages and links:
 
-def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str) -> tuple[str, list[tuple[str, str]], str, float]: 
-    winner_data, args_with_links = extract_data_from_CAM(obj1, obj2, aspect)
+def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str) -> tuple[str, list[tuple[str, str]], str, float]: 
+    winner_data, args_with_links = extract_data_from_CAM_ru(obj1, obj2, aspect)
     arguments = [arg[0] for arg in args_with_links]
-    template = create_template(obj1, obj2, aspect, arguments)
-    summary = predict_summary(template)
-    summary, args_with_links = correct_summary_and_links(summary, args_with_links)
+    template = create_template_ru(obj1, obj2, aspect, arguments)
+    summary = predict_summary_ru(template)
+    summary, args_with_links = correct_summary_and_links_ru(summary, args_with_links)
     return summary, args_with_links, winner_data['winner'], winner_data['percentage']
 
  
 # 3.7 the whole pipeline that accepts the question and returns the summary, percentages and links (should have two functions (3.1 and 3.6):
 
-def get_result_on_question(question: str) -> tuple[str, list[tuple[str, str]], str, float]:
-    extracted_data = extract_objs_asp(question)
+def get_result_on_question_ru(question: str) -> tuple[str, list[tuple[str, str]], str, float]:
+    extracted_data = extract_objs_asp_ru(question)
     if extracted_data == ("", "", ""):
         return "Question is not comparative!"
     (obj1, obj2, aspect) = extracted_data #extract_objs_asp(question)
-    return get_result_on_objs_asp(obj1, obj2, aspect)
+    return get_result_on_objs_asp_ru(obj1, obj2, aspect)
