@@ -139,7 +139,7 @@ def extract_data_from_CAM_ru(obj1: str, obj2: str, aspect: str, top=10) -> tuple
         args_with_links.append((top10args_obj1[i], top10args_obj1_links[i]))
     for i in range(min(10, len(top10args_obj2))):
         args_with_links.append((top10args_obj2[i], top10args_obj2_links[i]))
-    return {"winner":  winner, "percentage": percentage}, args_with_links
+    return {"winner":  winner, "percentage": percentage}, result
 
 # From CAM you can get not only objects with links, but also who is the winner and percentage, in is in the output of requests.get(address)
 # in colab, just look inside :) If you do not find anything, keep it hardcoded.
