@@ -203,7 +203,7 @@ def correct_summary_and_links_ru(summary: str, args_with_links: list[tuple[str, 
 def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str, top=10) -> tuple[str, list[tuple[str, str]], str, float]: 
     winner_data, args_with_links = extract_data_from_CAM_ru(obj1, obj2, aspect, top=10)
     return {
-        "args": args_with_links, "winner": winner_data['winner'], "percentage_winner": winner_data['percentage'],
+        "args": args_with_links, "winner": winner_data['winner'], "percentage_winner": int(winner_data['percentage']),
         "looser": obj2 if winner_data['winner']==obj1 else obj1
     }
 
