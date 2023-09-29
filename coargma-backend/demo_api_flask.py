@@ -2,7 +2,11 @@ from flask import Flask, request, jsonify
 import demo_api_backend as dab
 import demo_api_backend_ru as dab_ru
 
+from flask_cors import CORS, cross_origin
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
+
 
 @app.route("/")
 def home():
