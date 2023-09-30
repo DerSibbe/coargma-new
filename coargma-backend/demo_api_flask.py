@@ -122,7 +122,7 @@ def get_result_obj_asp_ru():
     asp = request.args['asp']
     return jsonify(dab_ru.get_result_on_objs_asp_ru(obj1, obj2, asp))
 
-@app.get("/get_result_on_question_ru", methods=["GET", "POST"])
+@app.get("/get_result_on_question_ru")
 def get_result_ru():
     question = request.args['question']
     return jsonify(dab_ru.get_result_on_question_ru(question))
