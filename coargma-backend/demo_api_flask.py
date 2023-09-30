@@ -1,8 +1,10 @@
 from flask import Flask, request, jsonify
 import demo_api_backend as dab
 import demo_api_backend_ru as dab_ru
-
+from flask_cors import CORS, cross_origin
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 
 @app.route("/")
@@ -120,7 +122,7 @@ def get_result_obj_asp_ru():
     asp = request.args['asp']
     return jsonify(dab_ru.get_result_on_objs_asp_ru(obj1, obj2, asp))
 
-@app.get("/get_result_on_question_ru")
+@app.get("/get_result_on_question_ru", methods=["GET", "POST"])
 def get_result_ru():
     question = request.args['question']
     return jsonify(dab_ru.get_result_on_question_ru(question))
