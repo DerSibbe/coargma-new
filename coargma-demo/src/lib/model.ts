@@ -4,9 +4,13 @@ const distribution = new BehaviorSubject<{object1: number, object2: number} | nu
 
 const summary = new BehaviorSubject<string[]>([]);
 
-const sources = new BehaviorSubject<{url: string, caption: string}[]>([]);
+const sources_obj1 = new BehaviorSubject<{url: string, caption: string}[]>([]);
+
+const sources_obj2 = new BehaviorSubject<{url: string, caption: string}[]>([]);
+
 
 const question = new BehaviorSubject("");
+
 
 function setQuestion(value: string) {
     question.next(value);
@@ -44,31 +48,44 @@ const couldCompare =
         .pipe(map(([question, object1, object2, aspect]) =>
             question || object1 && object2 && aspect));
 
+
+async function RequestCompare() {
+    const response = await fetch("https://rucam-api.ltdemos.informatik.uni-hamburg.de/get_result_on_question_ru?question=" + encodeURIComponent(question.value));
+    console.log(response)
+    const result = await response.json();
+    return result
+}
+
 function compare() {
-    distribution.next({
-        object1: 60,
-        object2: 40
-    });
-    summary.next([
-        "Summary is very good[1]",
-        "We should continue to do a good job[2]"
-    ]);
-    sources.next([
-        {
-          url: "https://google.com",
-          caption: "Google"
-        },
-        {
-          url: "https://github.com",
-          caption: "Github"
-        }
-    ]);
+    console.log(question.value);
+    RequestCompare().then(result => {
+        console.log(result);
+        distribution.next({
+            object1: result.percentage_winner,
+            object2: 100-result.percentage_winner
+        });
+
+        summary.next([""]);
+
+        sources_obj1.next(Object.values(result.args.object1.sentences).map((value) => ({
+            url: "",
+            caption: String(value[1])
+          })));
+
+        sources_obj2.next(Object.values(result.args.object2.sentences).map((value) => ({
+            url: "",
+            caption: String(value[1])
+          })));
+
+
+    })
 }
 
 export default {
     distribution,
     summary,
-    sources,
+    sources_obj1,
+    sources_obj2,
     question,
     setQuestion,
     object1,

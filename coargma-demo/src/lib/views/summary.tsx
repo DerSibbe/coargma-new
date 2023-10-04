@@ -7,12 +7,6 @@ export default function() {
     return (<>
         {summary.length > 0 ? <>
             <br/>
-            <h2>Summary</h2>
-            <div style={{background: "lightgrey"}}>
-            {summary.map(line => (<p>
-                &nbsp;{line}
-            </p>))}
-            </div>
         </> : <></>}
     </>);
 }
