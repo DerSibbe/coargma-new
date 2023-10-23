@@ -298,6 +298,8 @@ def baseline_extract_comp(adjs: list, founded_adjectives: list[str], text: str, 
 
 def baseline(texts, obj1_stem, obj2_stem):
     texts_after_baseline = []
+    bad_words = []
+    good_words = []
     for text in texts:
         good_words = [word for word in big_goods.keys() if word in text[0]]
         bad_words = [word for word in big_bads.keys() if word in text[0]]
