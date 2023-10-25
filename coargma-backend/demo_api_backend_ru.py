@@ -20,7 +20,7 @@ m = Mystem()
 # m.analyze('хорошо')
 import pymorphy2
 morph = pymorphy2.MorphAnalyzer()
-pipe = pipeline("text-classification", model="lilaspourpre/rubert-tiny-stance-calssification")
+pipe = pipeline("text-classification", model="lilaspourpre/xlmr-stance-ru")
 stemmer = snowballstemmer.stemmer('russian')
 es = Elasticsearch(["http://ltdemos.informatik.uni-hamburg.de/depcc-index"], http_auth = ("eugen", "testtest"), port=80)
 assert es.ping(), "ES is not available"
@@ -322,6 +322,7 @@ def find_for_object_for_class(sentence, obj1_stem, obj2_stem):
 
 def bert(sentences_with_scores, obj1_stem, obj2_stem):
     texts_to_class = [x[0] for x in sentences_with_scores]
+    texts_to_class_replaced = [x[0].replace(obj1_stem, "OBJ_A").replace(obj2_stem, "OBJ_B") for x in sentences_with_scores]
     class_result = pipe(texts_to_class)
     class_list_of_sentences_with_scores = []
     for text_idx in range(len(texts_to_class)):
@@ -334,7 +335,7 @@ def classify_sentences_baseline(list_of_sentences_with_scores, obj1_stem, obj2_s
     return list_of_sentences_with_all_scores_better_worse_only
 
 def classify_sentences_bert(list_of_sentences, obj1_stem, obj2_stem):
-    list_of_sentences_with_all_scores_better_worse_only = bert(list_of_sentences_with_scores, obj1_stem, obj2_stem) # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
+    list_of_sentences_with_all_scores_better_worse_only = bert(list_of_sentences, obj1_stem, obj2_stem) # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
     return list_of_sentences_with_all_scores_better_worse_only
 
 def calculate_bert_score(es_score, max_es_score, classifier_score):
@@ -404,7 +405,7 @@ def select_winner(obj1, obj2, result_obj1, result_obj2):
 def request_es(obj1: str, obj2: str, aspect: str, common:str="") -> tuple[dict, list[tuple[str, str]]]:
     obj1_stem = stemmer.stemWords([obj1])[0]
     obj2_stem = stemmer.stemWords([obj2])[0]
-    use_baseline = True # @param {type:"boolean"}
+    use_baseline = False # @param {type:"boolean"}
     list_of_sentences_with_scores = search_es(obj1, obj2, common, aspect) # это отсортированный список пар: (предложение, скор, макс_скор)
     print(f"filtered len: {len(list_of_sentences_with_scores)}")
     result_obj1, result_obj2, class_report = ru_cam(use_baseline, list_of_sentences_with_scores, obj1_stem, obj2_stem)
