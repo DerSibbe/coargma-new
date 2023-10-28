@@ -9,3 +9,4 @@ pymorphy2
 pymystem3
 tqdm
 pandas
+sentencepiece

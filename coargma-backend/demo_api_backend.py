@@ -1,31 +1,72 @@
 import requests
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, M2M100Tokenizer, M2M100ForConditionalGeneration, pipeline
 
+#for question translation
+translation_model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
+translation_tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
+
+#RU
 #for question classification
-model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
-tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_question_classification')
-
+#classification_model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
+#classification_tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_question_classification')
 #for obj/asp extraction
-model_checkpoint = "lilaspourpre/rubert-tiny-obj-asp"
-token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
-
-#english, keeping russian as default for now
-#for question classification
-#model = AutoModelForSequenceClassification.from_pretrained("uhhlt/roberta-binary-classifier", num_labels=2)
-#tokenizer = AutoTokenizer.from_pretrained('uhhlt/roberta-binary-classifier')
-#for obj/asp extraction
-#model_checkpoint = "uhhlt/model-obj-asp-en"
+#model_checkpoint = "lilaspourpre/rubert-tiny-obj-asp"
 #token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
 
+#EN
+#for english (upper lines use russian model for question classification and obj/asp extraction)
+#for question classification
+classification_model = AutoModelForSequenceClassification.from_pretrained("uhhlt/roberta-binary-classifier", num_labels=2)
+classification_tokenizer = AutoTokenizer.from_pretrained('uhhlt/roberta-binary-classifier')
+#for obj/asp extraction
+model_checkpoint = "uhhlt/model-obj-asp-en"
+token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
+
+#classifies input question as either comparative ("True") or non comparative ("False")
 def classify_input(question: str) -> bool:
-    inputs = tokenizer(question, return_tensors="pt")
+    inputs = classification_tokenizer(question, return_tensors="pt")
     with torch.no_grad():
-        logits = model(**inputs).logits
+        logits = classification_model(**inputs).logits
         predicted_class_id = logits.argmax().item()
     if predicted_class_id == 1:
         return True
     return False
+
+#translates input question from target language into english
+def translate_input(question: str, language_id: str):
+    english_question = question
+    if language_id != "en":
+        #translate question with model
+        translation_tokenizer.src_lang = language_id
+        encoded_question = translation_tokenizer(english_question, return_tensors="pt")
+        generated_tokens = translation_model.generate(**encoded_question, forced_bos_token_id=translation_tokenizer.get_lang_id("en"))
+        english_question = translation_tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+    return english_question
+
+#translate_output also has to be done
+def translate_output(result_data: tuple, language_id: str):
+    target_language_output = result_data
+    if language_id != "en":
+        (summary, args_with_links, winner, percentage) = result_data
+        translation_tokenizer.src_lang = "en"
+        # translate summary
+        encoded_summary = translation_tokenizer(summary, return_tensors="pt")
+        generated_tokens_summary = translation_model.generate(**encoded_summary, forced_bos_token_id=translation_tokenizer.get_lang_id(language_id))
+        target_language_summary = translation_tokenizer.batch_decode(generated_tokens_summary, skip_special_tokens=True)[0]
+        # translate winner (typically just one word, there has to be a way to simplify this...?)
+        encoded_winner = translation_tokenizer(winner, return_tensors="pt")
+        generated_tokens_winner = translation_model.generate(**encoded_winner, forced_bos_token_id=translation_tokenizer.get_lang_id(language_id))
+        target_language_winner = translation_tokenizer.batch_decode(generated_tokens_winner, skip_special_tokens=True)[0]
+        # translate args from args_with_links
+        target_language_args_with_links = []
+        for arg in args_with_links:
+            encoded_arg = translation_tokenizer(arg[0], return_tensors="pt")
+            generated_tokens_arg = translation_model.generate(**encoded_arg, forced_bos_token_id=translation_tokenizer.get_lang_id(language_id))
+            target_language_arg = translation_tokenizer.batch_decode(generated_tokens_arg, skip_special_tokens=True)[0]
+            target_language_args_with_links.append((target_language_arg, arg[1]))
+        target_language_output = (target_language_summary, target_language_args_with_links, target_language_winner, percentage)
+    return target_language_output
 
 # 3) create basic API for the demo, the following functions are expected:
 
@@ -164,3 +205,16 @@ def get_result_on_question(question: str) -> tuple[str, list[tuple[str, str]], s
         return "Question is not comparative!"
     (obj1, obj2, aspect) = extracted_data #extract_objs_asp(question)
     return get_result_on_objs_asp(obj1, obj2, aspect)
+
+# same as above, but with added translation. Question is translated from target_language to english, then processed, and the results are
+# finally translated back into the target language. If the question is not comparative, an error message (in the target language) should appear.
+def get_result_on_question_multilingual(question: str, language_id: str):
+    # 1. translate question from target language into english
+    english_question = translate_input(question, language_id)
+    # 2. compute results on english question
+    english_result = get_result_on_question(english_question)
+    # 3. translate results back into target language
+    if isinstance(english_result, str):
+        return "Not comparative" # TODO translate "Not comparative" message to language_id
+    target_language_result = translate_output(english_result, language_id)
+    return target_language_result

@@ -11,7 +11,7 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 def home():
     return "helloworld"
 
-#english methods (right now russian models are used for both as default though)
+#english methods
 
 @app.get("/check_comparative")
 def check_comparative():
@@ -68,6 +68,12 @@ def get_result_obj_asp():
 def get_result():
     question = request.args['question']
     return jsonify(dab.get_result_on_question(question))
+
+@app.get("/get_result_on_question_multilingual")
+def get_result_multilingual():
+    question = request.args['question']
+    language_id = request.args['language_id']
+    return jsonify(dab.get_result_on_question_multilingual(question, language_id))
 
 #russian methods
 
