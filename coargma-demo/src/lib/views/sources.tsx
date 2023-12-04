@@ -10,25 +10,27 @@ export default function() {
             <br/>
             
  <table>
+  <tbody>
     <tr>
-      <td>
-        <h2>Column 1</h2>
+      <td style={{verticalAlign: "top"}}>
+        <h2>For object 1</h2>
         <ol type="1">
             {sources_obj1.map(source => (<li>
                 <a href={source.url}>{source.caption}</a>
             </li>))}
-            </ol>
+        </ol>
       </td>
-      <td>
-        <h2>Column 2</h2>
+      <td style={{verticalAlign: "top"}}>
+        <h2>For object 2</h2>
         <ol type="1">
-            {sources_obj1.map(source => (<li>
+            {sources_obj2.map(source => (<li>
                 <a href={source.url}>{source.caption}</a>
             </li>))}
-            </ol>
+        </ol>
       </td>
     </tr>
-  </table>
+  </tbody>
+</table>
         </> : <></>}
     </>);
 }

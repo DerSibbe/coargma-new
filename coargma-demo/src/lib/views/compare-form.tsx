@@ -52,17 +52,25 @@ export default function() {
             <Col></Col>
         </Form.Group>
 
-        <Form.Group as={Row} className="mb-3">
+        <Form.Group as={Row} className="mb-3 align-items-center">
             <Col>
-                <Form.Label>number of arguments for each object</Form.Label>
+                <Form.Label>Max number of arguments</Form.Label>
             </Col>
             <Col>
                 <Form.Control type="number"
                     value={numberOfArguments} onChange={e => Model.setNumberOfArguments(+e.target.value)} />
             </Col>
-            <Col />
+            <Col>
+                <Form.Check 
+                    type="checkbox"
+                    defaultChecked={true}
+                    onChange={e => Model.setBaselineUse(e.target.checked)}
+                    label="Use Baseline"
+                />
+            </Col>
             <Col />
         </Form.Group>
+
 
         <Form.Group className="mb-3 d-flex justify-content-center">
             <Button variant="primary" size="lg" type="submit"

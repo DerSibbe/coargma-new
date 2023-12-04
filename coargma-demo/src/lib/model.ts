@@ -34,13 +34,21 @@ function setAspect(value: string) {
     aspect.next(value);
 }
 
-const numberOfArguments = new BehaviorSubject(10);
+const numberOfArguments = new BehaviorSubject<number>(10);
 
 function setNumberOfArguments(value: number) {
     if (value < 1) {
         value = 1;
     }
     numberOfArguments.next(value);
+    console.log(numberOfArguments.value)
+}
+
+const use_baseline = new BehaviorSubject<boolean>(true);
+
+function setBaselineUse(value: boolean) {
+    use_baseline.next(value);
+    console.log(use_baseline.value)
 }
 
 const couldCompare =
@@ -50,7 +58,7 @@ const couldCompare =
 
 
 async function RequestCompare() {
-    const response = await fetch("https://rucam-api.ltdemos.informatik.uni-hamburg.de/get_result_on_question_ru?question=" + encodeURIComponent(question.value));
+    const response = await fetch("http://localhost:15555/get_result_on_question_ru?question=" + encodeURIComponent(question.value) + "&top=" + encodeURIComponent(numberOfArguments.value) + "&use_baseline=" + encodeURIComponent(use_baseline.value));
     console.log(response)
     const result = await response.json();
     return result
@@ -64,17 +72,15 @@ function compare() {
             object1: result.percentage_winner,
             object2: 100-result.percentage_winner
         });
-
         summary.next([""]);
-
         sources_obj1.next(Object.values(result.args.object1.sentences).map((value) => ({
-            url: "",
-            caption: String(value[1])
+            url: String(value.link),
+            caption: String(value.text)
           })));
 
         sources_obj2.next(Object.values(result.args.object2.sentences).map((value) => ({
-            url: "",
-            caption: String(value[1])
+            url: String(value.link),
+            caption: String(value.text)
           })));
 
 
@@ -95,7 +101,9 @@ export default {
     aspect,
     setAspect,
     numberOfArguments,
+    use_baseline,
     setNumberOfArguments,
+    setBaselineUse,
     couldCompare,
     compare
 };
