@@ -58,7 +58,7 @@ const couldCompare =
 
 
 async function RequestCompare() {
-    const response = await fetch("http://rucam-api.ltdemos.informatik.uni-hamburg.de/get_result_on_question_ru?question=" + encodeURIComponent(question.value) + "&top=" + encodeURIComponent(numberOfArguments.value) + "&use_baseline=" + encodeURIComponent(use_baseline.value));
+    const response = await fetch("https://rucam-api.ltdemos.informatik.uni-hamburg.de/get_result_on_question_ru?question=" + encodeURIComponent(question.value) + "&top=" + encodeURIComponent(numberOfArguments.value) + "&use_baseline=" + encodeURIComponent(use_baseline.value));
     console.log(response)
     const result = await response.json();
     return result
