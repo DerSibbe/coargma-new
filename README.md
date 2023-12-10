@@ -1,2 +1,2 @@
-How to launch:
+# How to launch:
 docker compose up -d
