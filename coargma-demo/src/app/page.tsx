@@ -16,11 +16,8 @@ export default function Home() {
       </Row>
       <Row>
         <Col>
-          <h1>Comparative Argumentative Machine v2 RU</h1>
+          <h1 className='white-color'>Comparative Argumentative Machine v2 RU</h1>
         </Col>
-      </Row>
-      <Row>
-        <Col><br/><br/></Col>
       </Row>
       <Row>
         <Col>

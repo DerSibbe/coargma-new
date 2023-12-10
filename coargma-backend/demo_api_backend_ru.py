@@ -6,7 +6,6 @@ from collections import defaultdict, OrderedDict
 from elasticsearch6 import Elasticsearch
 import snowballstemmer
 # Use a pipeline as a high-level helper
-from transformers import pipeline
 import pandas as pd
 import pymorphy2
 import json
@@ -21,7 +20,13 @@ m = Mystem()
 # m.analyze('хорошо')
 
 morph = pymorphy2.MorphAnalyzer()
-pipe = pipeline("text-classification", model="lilaspourpre/rubert-tiny-stance-calssification")
+#pipe = pipeline("text-classification", model="lilaspourpre/rubert-tiny-stance-calssification")
+pipe2 = pipeline("text-classification", model="lilaspourpre/xlmr-stance-ru")
+model_label_hashmap = {
+    'LABEL_0': 'NONE',
+    'LABEL_2': 'BETTER',
+    'LABEL_3': 'WORSE'
+}
 stemmer = snowballstemmer.stemmer('russian')
 es = Elasticsearch(["http://ltdemos.informatik.uni-hamburg.de/depcc-index"], http_auth=("eugen", "testtest"), port=80)
 assert es.ping(), "ES is not available"
@@ -71,7 +76,7 @@ def classify_input_ru(question: str) -> bool:
 # 3.1 given a text, extract objects and aspect:
 
 # param: question: str; natural language comparative question
-# return: tuple(str, str, str), two objects and comparative aspects of the question
+# return: str, str, str : two objects and comparative aspects of the question
 
 def extract_objs_asp_ru(question: str):
     # 1.: Classify question as comparative or non comparative
@@ -115,20 +120,49 @@ def postprocess_obj_asp(question, model_output):
     return final_dict
 
 
-# 3.2 given objects and aspect make a request to CAM and select 20 arguments with links (top-10 for each object) (I have code for that, here
-# is the link to colab (but no links are returned there): https://colab.research.google.com/drive/1X3zflENMNFSegxM-N5IQ3z-oIeDHJ-4c?usp=sharing
-# CAM is off right now, but hopefully will be up starting next week. If CAM will not be up, then just return some 20 hardcoded args with the
-# random links
+def mask_objects_ru(row, object_1, object_2):
+    if len(object_1.split()) == 1 and len(object_2.split()) == 1:
+        replaced_row = " ".join(["[FIRST_ENTITY]" if object_1.lower() in w.lower() else "[SECOND_ENTITY]" if object_2.lower() in w.lower() else w for w in row.split()])
 
-# param: obj1: str, obj2: str, aspect: str; two objects and one comparative aspect
-# return: tuple[dict, list[tuple[str, str]]]; dict with winner data (object and percentage), list with arguments and links for both objects
-def extract_data_from_CAM_ru(obj1: str, obj2: str, aspect: str, top=10, use_baseline: bool = True):  # to be edited
+    elif len(object_1.split()) > 1 and len(object_2.split()) == 1:
+        out = []
+        for w in row.split():
+            for o1 in object_1.lower().split():
+                if o1 in w.lower() and "[FIRST_ENTITY]" not in out and w.lower() not in [w.lower() for w in out]:
+                    out.append("[FIRST_ENTITY]")
+                    break
+                elif object_2.lower() in w.lower() and "[SECOND_ENTITY]" not in out:
+                    out.append("[SECOND_ENTITY]")
+                    break
+                else:
+                    if w.lower() not in [w.lower() for w in out] and w.lower() not in object_1.lower().split() and w.lower() not in object_2.lower().split():
+                        out.append(w)
+        replaced_row = " ".join(out)
+
+    elif len(object_1.split()) == 1 and len(object_2.split()) > 1:
+        out = []
+        for w in row.split():
+            for o2 in object_2.lower().split():
+                if o2 in w.lower() and "[SECOND_ENTITY]" not in out and w.lower() not in [w.lower() for w in out]:
+                    out.append("[SECOND_ENTITY]")
+                    break
+                elif object_1.lower() in w.lower() and "[FIRST_ENTITY]" not in out:
+                    out.append("[FIRST_ENTITY]")
+                    break
+                else:
+                    if w.lower() not in [w.lower() for w in out] and w.lower() not in object_1.lower().split() and w.lower() not in object_2.lower().split():
+                        out.append(w)
+        replaced_row = " ".join(out)
+
+    else:
+        replaced_row = row.replace(object_1,"[FIRST_ENTITY]").replace(object_2,"[SECOND_ENTITY]")
+      # row["text"] = row["answer"].replace(row["object_0"],"[FIRST_ENTITY]").replace(row["object_1"],"[SECOND_ENTITY]")
+    return replaced_row
+
+
+def extract_data_from_cam_ru(obj1: str, obj2: str, aspect: str, top=10, use_baseline: bool = True):  # to be edited
     # extract args, links, winner and percentage from CAM
-    result = request_es(obj1, obj2, aspect, use_baseline=use_baseline, top=top)
-    #top10args_obj1 = [i['text'] for i in result['object1']['sentences'][:top]]  # args
-    #top10args_obj2 = [i['text'] for i in result['object2']['sentences'][:top]]
-    #top10args_obj1_links = ["" for i in result['object1']['sentences'][:top]]  # links (only first link if link is provided multiple times)
-    #top10args_obj2_links = ["" for i in result['object2']['sentences'][:top]]
+    result = request_es(obj1_es=obj1, obj2_es=obj2, aspect=aspect, use_base=use_baseline, tops=top)
     winner = result['winner']
     winner_points = max(result['object1']['totalPoints'], result['object2']['totalPoints'])
     total_points = result['object1']['totalPoints'] + result['object2']['totalPoints']
@@ -136,24 +170,13 @@ def extract_data_from_CAM_ru(obj1: str, obj2: str, aspect: str, top=10, use_base
         percentage = 50.0
     else:
         percentage = round(100 * winner_points / total_points, 1)
-    # turn args and links into list of tuples [("arg1", "link1"), (...
-    #args_with_links = []
-    #for i in range(min(10, len(top10args_obj1))):
-    #    args_with_links.append((top10args_obj1[i], top10args_obj1_links[i]))
-    #for i in range(min(10, len(top10args_obj2))):
-    #    args_with_links.append((top10args_obj2[i], top10args_obj2_links[i]))
     return {"winner": winner, "percentage": percentage}, result
 
-
-# From CAM you can get not only objects with links, but also who is the winner and percentage, in is in the output of requests.get(address)
-# in colab, just look inside :) If you do not find anything, keep it hardcoded.
 
 # 3.3 given objects and aspect and arguments form CAM generate a text we use to put in the model (I can do it and you can return any example
 # from the dataset or you can look how the input looks like and create the text yourself, it is quite easy to understand what is the template
 # and where to paste input)
 
-# param: obj1: str, obj2: str, aspect: str, arguments: list[str]; objects, comparative aspect and list of arguments for either object
-# return: str; template input text as used for ChatGPT asking for a comparison of obj1 and obj2 with a list of args
 def create_template_ru(obj1: str, obj2: str, aspect: str, arguments: list[str]) -> str:
     template_with_text = "Write a comparison of \"" + obj1 + "\" and \"" + obj2 + "\". Summarize only relevant arguments from the list.\n\n" \
                          + "\n".join(arguments) + \
@@ -180,11 +203,6 @@ def predict_summary_ru(text: str) -> str:
 
 # 3.5 correct summary and list of links: keep only those arguments, that were used in summary and reenumerate them in the summary (from 1 to n,
 # where n = number_links_used)
-
-# param: summary: str, args_with_links: list[tuple[str, str]]; Summary text comparing two objects under a list of args, and list of args
-#        with corresponding links 
-# return: tuple[str, list[tuple[str, str]]]; Summary with args renumbered from 1 to number of args used, and list of args with corresponding
-#        links stripped of unused args
 def correct_summary_and_links_ru(summary: str, args_with_links: list[tuple[str, str]]) -> tuple[
     str, list[tuple[str, str]]]:
     improved_summary = summary
@@ -208,7 +226,7 @@ def correct_summary_and_links_ru(summary: str, args_with_links: list[tuple[str, 
 # 3.6 the whole pipeline that accepts obj1, obj2 and returns the summary, percentages and links:
 
 def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str, top=10, use_baseline: bool = True):
-    winner_data, args_with_links = extract_data_from_CAM_ru(obj1, obj2, aspect, top, use_baseline)
+    winner_data, args_with_links = extract_data_from_cam_ru(obj1=obj1, obj2=obj2, aspect=aspect, top=top, use_baseline=use_baseline)
     return {
         "args": args_with_links, "winner": winner_data['winner'], "percentage_winner": int(winner_data['percentage']),
         "looser": obj2 if winner_data['winner'] == obj1 else obj1
@@ -216,13 +234,12 @@ def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str, top=10, use_bas
 
 
 # 3.7 the whole pipeline that accepts the question and returns the summary, percentages and links (should have two functions (3.1 and 3.6):
-
 def get_result_on_question_ru(question: str, top: int = 10, use_baseline: bool = True):
     extracted_data = extract_objs_asp_ru(question)
     if extracted_data == ("", "", ""):
         return "Question is not comparative!"
     (obj1, obj2, aspect) = extracted_data  # extract_objs_asp(question)
-    return get_result_on_objs_asp_ru(obj1, obj2, aspect, top, use_baseline)
+    return get_result_on_objs_asp_ru(obj1=obj1, obj2=obj2, aspect=aspect, top=top, use_baseline=use_baseline)
 
 
 def index_search_elastic(hits, min_words, max_words, obj1, obj2, common_obj="", aspect=""):
@@ -334,31 +351,62 @@ def find_for_object_for_class(sentence, obj1_stem, obj2_stem):
         return 'obj2'
 
 
-def bert(sentences_with_scores, obj1_stem, obj2_stem):
-    texts_to_class = [x[0] for x in sentences_with_scores]
-    class_result = pipe(texts_to_class)
+def find_for_object_bert(sentence):
+    if sentence.find("[FIRST_ENTITY]") < sentence.find("[SECOND_ENTITY]"):
+        return 'obj1'
+    else:
+        return 'obj2'
+
+
+def bert(sentences_with_scores, obj1_stem, obj2_stem, topn: int = 10):
+    texts_to_class = [x[0] for x in sorted(sentences_with_scores, key=lambda tup: tup[1], reverse=True)] # sort based on es_score descending
+    masked_texts = [mask_objects_ru(x, obj1_stem, obj2_stem) for x in texts_to_class]
+    masked_texts_for_objects = [find_for_object_bert(x) for x in masked_texts]
+    class_results = []
+    obj1_counter = 0
+    obj2_counter = 0
+    for i, text in tqdm(enumerate(masked_texts), desc='bert', total=len(sentences_with_scores)):
+        class_result = pipe2(text)[0]
+        label = class_result['label']
+        class_result['label'] = model_label_hashmap[label]
+        class_results.append(class_result)
+        #(comp_obj == 'obj1' and comp_type == 'BETTER') or (comp_obj == 'obj2' and comp_type == 'WORSE') obj1
+        if label == 'LABEL_2':  # BETTER
+            if masked_texts_for_objects[i] == 'obj1':
+                obj1_counter += 1
+                #print(f"obj1: {obj1_counter}")
+            else:
+                obj2_counter += 1
+                #print(f"obj2: {obj2_counter}")
+        elif label == 'LABEL_3':  # WORSE
+            if masked_texts_for_objects[i] == 'obj1':
+                obj2_counter += 1
+                #print(f"obj2: {obj2_counter}")
+            else:
+                obj1_counter += 1
+                #print(f"obj1: {obj1_counter}")
+        if obj1_counter >= topn and obj2_counter >= topn:
+            break
     class_list_of_sentences_with_scores = []
-    for text_idx in range(len(texts_to_class)):
-        if class_result[text_idx]['label'] != 'NONE':
-            class_list_of_sentences_with_scores.append((texts_to_class[text_idx], class_result[text_idx]['label'],
-                                                        find_for_object_for_class(texts_to_class[text_idx], obj1_stem,
-                                                                                  obj2_stem),
+    for text_idx in range(len(class_results)):
+        if class_results[text_idx]['label'] != 'NONE':
+            class_list_of_sentences_with_scores.append((texts_to_class[text_idx], class_results[text_idx]['label'],
+                                                        masked_texts_for_objects[text_idx],
                                                         sentences_with_scores[text_idx][1],
                                                         sentences_with_scores[text_idx][2],
-                                                        class_result[text_idx]['score'],
+                                                        class_results[text_idx]['score'],
                                                         sentences_with_scores[text_idx][3]))
     return class_list_of_sentences_with_scores
 
 
 def classify_sentences_baseline(list_of_sentences_with_scores, obj1_stem, obj2_stem):
-    list_of_sentences_with_all_scores_better_worse_only = baseline(list_of_sentences_with_scores, obj1_stem,
-                                                                   obj2_stem)  # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
+    list_of_sentences_with_all_scores_better_worse_only = baseline(list_of_sentences_with_scores, obj1_stem, obj2_stem)  # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
     return list_of_sentences_with_all_scores_better_worse_only
 
 
-def classify_sentences_bert(list_of_sentences, obj1_stem, obj2_stem):
+def classify_sentences_bert(list_of_sentences_with_scores, obj1_stem, obj2_stem, topn: int = 10):
     list_of_sentences_with_all_scores_better_worse_only = bert(list_of_sentences_with_scores, obj1_stem,
-                                                               obj2_stem)  # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
+                                                               obj2_stem, topn)  # предложение, тип сравнения, какой объект, скор, макс_скор, уверенность
     return list_of_sentences_with_all_scores_better_worse_only
 
 
@@ -401,20 +449,18 @@ def calculate_final_scores_baseline(list_of_sentences_with_scores):
     return sentences_with_final_scores_obj1, sentences_with_final_scores_obj2
 
 
-def ru_cam(baseline, list_of_sentences_with_scores, obj1_stem, obj2_stem):
-    if baseline:
-        # print("Classify using baseline")
+def ru_cam(base: bool, list_of_sentences_with_scores, obj1_stem, obj2_stem, topn: int = 10):
+    if base:
+        print("Using baseline")
         res_base = classify_sentences_baseline(list_of_sentences_with_scores, obj1_stem, obj2_stem)
-        # print(f"baseline len: {len(res_base)}")
         result_obj1, result_obj2 = calculate_final_scores_baseline(res_base)
-        # print(f"for obj1: {len(result_obj1)} | for obj2: {len(result_obj2)}")
         return result_obj1, result_obj2, res_base
     else:
-        # print("Classify using bert")
-        res_bert = classify_sentences_bert(list_of_sentences_with_scores, obj1_stem, obj2_stem)
-        # print(f"bert len: {len(res_bert)}")
+        print("Not using baseline")
+        res_bert = classify_sentences_bert(list_of_sentences_with_scores, obj1_stem, obj2_stem, topn)
+        with open("result.json", "w", encoding="UTF8") as out_f:
+            json.dump(res_bert, out_f, ensure_ascii=False, indent=4)
         result_obj1, result_obj2 = calculate_final_scores_bert(res_bert)
-        # print(f"for obj1: {len(result_obj1)} | for obj2: {len(result_obj2)}")
         return result_obj1, result_obj2, res_bert
 
 
@@ -432,20 +478,20 @@ def select_winner(obj1, obj2, result_obj1, result_obj2):
     return total_points_a, total_points_b, winner
 
 
-def request_es(obj1: str, obj2: str, aspect: str, common: str = "", use_baseline: bool = True, top: int = 10):
-    obj1_stem = stemmer.stemWords([obj1])[0]
-    obj2_stem = stemmer.stemWords([obj2])[0]
-    list_of_sentences_with_scores = search_es(obj1, obj2, common,
+def request_es(obj1_es: str, obj2_es: str, aspect: str, common: str = "", use_base: bool = True, tops: int = 10):
+    obj1_stem = stemmer.stemWords([obj1_es])[0]
+    obj2_stem = stemmer.stemWords([obj2_es])[0]
+    list_of_sentences_with_scores = search_es(obj1_es, obj2_es, common,
                                               aspect)  # это отсортированный список пар: (предложение, скор, макс_скор)
     # print(f"filtered len: {len(list_of_sentences_with_scores)}")
-    result_obj1, result_obj2, class_report = ru_cam(use_baseline, list_of_sentences_with_scores, obj1_stem, obj2_stem)
-    total_points_a, total_points_b, winner = select_winner(obj1, obj2, result_obj1, result_obj2)
-    obj1_top_clam = result_obj1[0:int(top)]
-    obj2_top_clam = result_obj2[0:int(top)]
+    result_obj1, result_obj2, class_report = ru_cam(use_base, list_of_sentences_with_scores, obj1_stem, obj2_stem, tops)
+    total_points_a, total_points_b, winner = select_winner(obj1_es, obj2_es, result_obj1, result_obj2)
+    obj1_top_clam = result_obj1[0:int(tops)]
+    obj2_top_clam = result_obj2[0:int(tops)]
     return {
-        "object1": {"name": obj1, "sentences": jsonify_sentences(obj1, obj1_top_clam),
+        "object1": {"name": obj1_es, "sentences": jsonify_sentences(obj1_es, obj1_top_clam),
                     "totalPoints": total_points_a},
-        "object2": {"name": obj2, "sentences": jsonify_sentences(obj2, obj2_top_clam),
+        "object2": {"name": obj2_es, "sentences": jsonify_sentences(obj2_es, obj2_top_clam),
                     "totalPoints": total_points_b},
         "winner": winner
     }
@@ -454,3 +500,14 @@ def request_es(obj1: str, obj2: str, aspect: str, common: str = "", use_baseline
 def get_doc_link_from_doc_id(doc_id):
     doc = es.get(index="ru_oscar.docs", doc_type='doc', id=doc_id)
     return doc['_source']['link']
+
+
+# Test purpose
+# if __name__ == "__main__":
+#     obj1 = "андроид"
+#     obj2 = "айфон"
+#     asp = ""
+#     top = 10
+#     use_baseline = False
+#     with open("asp.json", "w", encoding="UTF8") as out_f:
+#         json.dump(get_result_on_objs_asp_ru(obj1, obj2, asp, top, use_baseline), out_f, ensure_ascii=False, indent=4)
