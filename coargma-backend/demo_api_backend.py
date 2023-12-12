@@ -1,27 +1,43 @@
 import requests
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForSeq2SeqLM, pipeline
+
+#TODO if russian question, allow to choose between "translate to english -> cam -> translate back" and "russian elastic search", possibly also both
+
+#for language classification
+langid_pipe = pipeline("text-classification", model="papluca/xlm-roberta-base-language-detection")
+
+#for translation english to russian
+pipe_en_ru = pipeline("translation", model="Helsinki-NLP/opus-mt-en-ru")
+#for translation russian to english
+pipe_ru_en = pipeline("translation", model="Helsinki-NLP/opus-mt-ru-en")
 
 #for question classification
-model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
-tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_question_classification')
+qclass_model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
+qclass_tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_question_classification')
 
 #for obj/asp extraction
 model_checkpoint = "lilaspourpre/rubert-tiny-obj-asp"
 token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
 
-#english, keeping russian as default for now
-#for question classification
-#model = AutoModelForSequenceClassification.from_pretrained("uhhlt/roberta-binary-classifier", num_labels=2)
-#tokenizer = AutoTokenizer.from_pretrained('uhhlt/roberta-binary-classifier')
-#for obj/asp extraction
-#model_checkpoint = "uhhlt/model-obj-asp-en"
-#token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
+def identify_language(question: str):
+    result = langid_pipe(question)
+    langid = result[0]['label']
+    return langid
+
+def translate_objs(obj1: str, obj2: str):
+    input = ", ".join([obj1, obj2])
+    src_language_id = identify_language(input)
+    if src_language_id == "ru":
+        translation = pipe_ru_en(input)[0]['translation_text']
+        return translation.split(", "), identify_language(translation)
+    translation = pipe_en_ru(input)[0]['translation_text']
+    return translation.split(", "), identify_language(translation)
 
 def classify_input(question: str) -> bool:
-    inputs = tokenizer(question, return_tensors="pt")
+    inputs = qclass_tokenizer(question, return_tensors="pt")
     with torch.no_grad():
-        logits = model(**inputs).logits
+        logits = qclass_model(**inputs).logits
         predicted_class_id = logits.argmax().item()
     if predicted_class_id == 1:
         return True
@@ -53,10 +69,7 @@ def extract_objs_asp(question: str):# -> tuple(str, str, str):
         return objs[0], objs[1], asp
     return "", "", ""
 
-# 3.2 given objects and aspect make a request to CAM and select 20 arguments with links (top-10 for each object) (I have code for that, here
-# is the link to colab (but no links are returned there): https://colab.research.google.com/drive/1X3zflENMNFSegxM-N5IQ3z-oIeDHJ-4c?usp=sharing
-# CAM is off right now, but hopefully will be up starting next week. If CAM will not be up, then just return some 20 hardcoded args with the
-# random links
+# 3.2 given objects and aspect make a request to CAM and select 20 arguments with links (top-10 for each object)
 
 # param: obj1: str, obj2: str, aspect: str; two objects and one comparative aspect
 # return: tuple[dict, list[tuple[str, str]]]; dict with winner data (object and percentage), list with arguments and links for both objects
@@ -88,12 +101,7 @@ def extract_data_from_CAM(obj1: str, obj2: str, aspect: str) -> tuple[dict, list
         args_with_links.append((top10args_obj2[i], top10args_obj2_links[i]))
     return {"winner":  winner, "percentage": percentage}, args_with_links
 
-# From CAM you can get not only objects with links, but also who is the winner and percentage, in is in the output of requests.get(address)
-# in colab, just look inside :) If you do not find anything, keep it hardcoded.
-
-# 3.3 given objects and aspect and arguments form CAM generate a text we use to put in the model (I can do it and you can return any example
-# from the dataset or you can look how the input looks like and create the text yourself, it is quite easy to understand what is the template
-# and where to paste input)
+# 3.3 given objects and aspect and arguments form CAM generate a text we use to put in the model
 
 # param: obj1: str, obj2: str, aspect: str, arguments: list[str]; objects, comparative aspect and list of arguments for either object
 # return: str; template input text as used for ChatGPT asking for a comparison of obj1 and obj2 with a list of args
@@ -105,7 +113,7 @@ def create_template(obj1: str, obj2: str, aspect: str, arguments: list[str]) -> 
     return template_with_text
 
 
-# 3.4 given text generate summary (using the fine-tuned model, I have it, but let us keep it hardcoded for now, just return any summary)
+# 3.4 given text generate summary 
 
 # param: text: str; text asking for a comparison of two objects under a list of arguments (see create_template())
 # return: str; comparison of aforementioned objects using the list of arguments

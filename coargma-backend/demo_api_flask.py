@@ -62,6 +62,18 @@ def get_result_obj_asp():
     obj1 = request.args['obj1']
     obj2 = request.args['obj2']
     asp = request.args['asp']
+    #language_id = request.args['lang_id']
+    alternative_search = request.args['altsearch']
+    if alternative_search == 'true':
+        translation, langid = dab.translate_objs(obj1, obj2)
+        obj1_translated, obj2_translated = translation
+        if langid == "ru":
+            return jsonify([dab_ru.get_result_on_objs_asp_ru(obj1_translated, obj2_translated, ""), dab.get_result_on_objs_asp(obj1, obj2, "")])
+        return jsonify([dab.get_result_on_objs_asp(obj1_translated, obj2_translated, ""), dab_ru.get_result_on_objs_asp_ru(obj1, obj2, "")])
+    input = ", ".join([obj1, obj2])
+    langid = dab.identify_language(input)
+    if langid == "ru":
+        return jsonify(dab_ru.get_result_on_objs_asp_ru(obj1, obj2, asp))    
     return jsonify(dab.get_result_on_objs_asp(obj1, obj2, asp))
 
 @app.get("/get_result_on_question")
