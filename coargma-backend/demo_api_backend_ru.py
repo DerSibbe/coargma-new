@@ -250,6 +250,7 @@ def index_search_elastic(hits, min_words, max_words, obj1, obj2, common_obj="", 
         query_text += f" AND ({aspect.lower()})"
     es_result = es.search(
         index="ru_oscar.sentences",
+        doc_type="sent",
         body={
             "from": 0,
             "size": hits,
@@ -259,7 +260,8 @@ def index_search_elastic(hits, min_words, max_words, obj1, obj2, common_obj="", 
                         {
                             "query_string": {
                                 "query": query_text,
-                                "fields": ["sentence"]
+                                "default_field": "sentence",
+                                "analyzer": "russian"
                             }
                         }
                     ],
@@ -481,8 +483,11 @@ def select_winner(obj1, obj2, result_obj1, result_obj2):
 def request_es(obj1_es: str, obj2_es: str, aspect: str, common: str = "", use_base: bool = True, tops: int = 10):
     obj1_stem = stemmer.stemWords([obj1_es])[0]
     obj2_stem = stemmer.stemWords([obj2_es])[0]
-    list_of_sentences_with_scores = search_es(obj1_es, obj2_es, common,
-                                              aspect)  # это отсортированный список пар: (предложение, скор, макс_скор)
+    aspect_stem = stemmer.stemWords([aspect])[0] if aspect != "" else ""
+    common_stem = stemmer.stemWords([common])[0] if common != "" else ""
+
+    list_of_sentences_with_scores = search_es(obj1_stem, obj2_stem, common_stem,
+                                              aspect_stem)  # это отсортированный список пар: (предложение, скор, макс_скор)
     # print(f"filtered len: {len(list_of_sentences_with_scores)}")
     result_obj1, result_obj2, class_report = ru_cam(use_base, list_of_sentences_with_scores, obj1_stem, obj2_stem, tops)
     total_points_a, total_points_b, winner = select_winner(obj1_es, obj2_es, result_obj1, result_obj2)
