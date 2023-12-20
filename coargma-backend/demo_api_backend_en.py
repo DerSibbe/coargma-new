@@ -2,16 +2,6 @@ import requests
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForSeq2SeqLM, pipeline
 
-#TODO if russian question, allow to choose between "translate to english -> cam -> translate back" and "russian elastic search", possibly also both
-
-#for language classification
-langid_pipe = pipeline("text-classification", model="papluca/xlm-roberta-base-language-detection")
-
-#for translation english to russian
-pipe_en_ru = pipeline("translation", model="Helsinki-NLP/opus-mt-en-ru")
-#for translation russian to english
-pipe_ru_en = pipeline("translation", model="Helsinki-NLP/opus-mt-ru-en")
-
 #for question classification
 qclass_model = AutoModelForSequenceClassification.from_pretrained("lilaspourpre/rubert-tiny-comp_question_classification", num_labels=2)
 qclass_tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_question_classification')
@@ -20,19 +10,7 @@ qclass_tokenizer = AutoTokenizer.from_pretrained('lilaspourpre/rubert-tiny-comp_
 model_checkpoint = "lilaspourpre/rubert-tiny-obj-asp"
 token_classifier = pipeline("token-classification", model=model_checkpoint, aggregation_strategy="simple")
 
-def identify_language(question: str):
-    result = langid_pipe(question)
-    langid = result[0]['label']
-    return langid
 
-def translate_objs(obj1: str, obj2: str):
-    input = ", ".join([obj1, obj2])
-    src_language_id = identify_language(input)
-    if src_language_id == "ru":
-        translation = pipe_ru_en(input)[0]['translation_text']
-        return translation.split(", "), identify_language(translation)
-    translation = pipe_en_ru(input)[0]['translation_text']
-    return translation.split(", "), identify_language(translation)
 
 def classify_input(question: str) -> bool:
     inputs = qclass_tokenizer(question, return_tensors="pt")
@@ -155,7 +133,7 @@ def correct_summary_and_links(summary: str, args_with_links: list[tuple[str, str
 
 # 3.6 the whole pipeline that accepts obj1, obj2 and returns the summary, percentages and links:
 
-def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str) -> tuple[str, list[tuple[str, str]], str, float]: 
+def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str="") -> tuple[str, list[tuple[str, str]], str, float]: 
     winner_data, args_with_links = extract_data_from_CAM(obj1, obj2, aspect)
     arguments = [arg[0] for arg in args_with_links]
     template = create_template(obj1, obj2, aspect, arguments)

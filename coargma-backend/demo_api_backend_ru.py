@@ -207,7 +207,7 @@ def correct_summary_and_links_ru(summary: str, args_with_links: list[tuple[str, 
 
 # 3.6 the whole pipeline that accepts obj1, obj2 and returns the summary, percentages and links:
 
-def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str, top=10, use_baseline: bool = True):
+def get_result_on_objs_asp_ru(obj1: str, obj2: str, aspect: str="", top=10, use_baseline: bool = True):
     winner_data, args_with_links = extract_data_from_CAM_ru(obj1, obj2, aspect, top, use_baseline)
     return {
         "args": args_with_links, "winner": winner_data['winner'], "percentage_winner": int(winner_data['percentage']),
