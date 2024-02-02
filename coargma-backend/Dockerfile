@@ -6,4 +6,4 @@ RUN pip install --upgrade pip
 RUN pip3 install -r requirements.txt
 RUN make /app_backend
 EXPOSE 15555
-CMD python demo_api_flask.py
+CMD [ "python", "demo_api_flask.py" ]

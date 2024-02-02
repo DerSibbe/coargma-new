@@ -5,6 +5,7 @@ torch -f https://download.pytorch.org/whl/torch_stable.html
 transformers
 elasticsearch6
 snowballstemmer
+sentencepiece
 pymorphy2
 pymystem3
 tqdm

@@ -1,12 +1,22 @@
 version: '3'
+
 services:
   cam-backend:
     build: ./coargma-backend
     container_name: coargma-backend
     ports:
-      - "15555:15555"
+      - "127.0.0.1:15555:15555"
+    networks:
+      - frontend
+      - backend
   coargma-demo:
     build: ./coargma-demo
-    container_name: coargma_frontend
+    container_name: coargma-demo
     ports:
       - "15556:3000"
+    networks:
+      - frontend
+
+networks:
+  frontend: 
+  backend:
