@@ -19,20 +19,20 @@ def get_lang_id():
     return jsonify(dabm.identify_language(obj1, obj2, asp))
 
 #translate_ru_en(obj1: str, obj2: str, asp = "")
-@app.get("/translate_ru_en")
-def get_translation_ru_en():
+@app.get("/translateinp_ru_en")
+def get_translationinp_ru_en():
     obj1 = request.args['obj1']
     obj2 = request.args['obj2']
     asp = request.args.get('asp', '')
-    return jsonify(dabm.translate_ru_en(obj1, obj2, asp))
+    return jsonify(dabm.translateinp_ru_en(obj1, obj2, asp))
 
 #translate_en_ru(obj1: str, obj2: str, asp = "")
-@app.get("/translate_en_ru")
-def get_translation_en_ru():
+@app.get("/translateinp_en_ru")
+def get_translationinp_en_ru():
     obj1 = request.args['obj1']
     obj2 = request.args['obj2']
     asp = request.args.get('asp', '')
-    return jsonify(dabm.translate_en_ru(obj1, obj2, asp))
+    return jsonify(dabm.translateinp_en_ru(obj1, obj2, asp))
 
 #translate_objs_asp(obj1: str, obj2: str, asp = "")
 @app.get("/translate_objs_asp")

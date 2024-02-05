@@ -60,10 +60,8 @@ def extract_data_from_CAM(obj1: str, obj2: str, aspect: str) -> tuple[dict, list
     x = requests.get(address)
     result = x.json()
     #extract args, links, winner and percentage from CAM
-    top10args_obj1 = [i['text'] for i in result['object1']['sentences'][:10]] #args
-    top10args_obj2 = [i['text'] for i in result['object2']['sentences'][:10]]
-    top10args_obj1_links = [list(i['id_pair'].keys())[0] for i in result['object1']['sentences'][:10]] #links (only first link if link is provided multiple times)
-    top10args_obj2_links = [list(i['id_pair'].keys())[0] for i in result['object2']['sentences'][:10]]
+    top10args_obj1 = [{'text': i['text'], 'CAM_score': i['CAM_score'], 'link': list(i['id_pair'].keys())[0]} for i in result['object1']['sentences'][:10]] #args
+    top10args_obj2 = [{'text': i['text'], 'CAM_score': i['CAM_score'], 'link': list(i['id_pair'].keys())[0]} for i in result['object2']['sentences'][:10]]
     winner = result['winner']
     winner_points = max(result['object1']['totalPoints'], result['object2']['totalPoints'])
     total_points = result['object1']['totalPoints'] + result['object2']['totalPoints']
@@ -71,12 +69,14 @@ def extract_data_from_CAM(obj1: str, obj2: str, aspect: str) -> tuple[dict, list
         percentage = 50.0
     else:
         percentage = round(100*winner_points/total_points, 1)
+    args_with_links = {'object1': {'name': obj1, 'sentences': top10args_obj1, 'totalPoints': result['object1']['totalPoints']},
+                        'object2': {'name': obj2, 'sentences': top10args_obj2, 'totalPoints': result['object2']['totalPoints']}}
     #turn args and links into list of tuples [("arg1", "link1"), (...
-    args_with_links = []
-    for i in range(min(10, len(top10args_obj1))):
-        args_with_links.append((top10args_obj1[i], top10args_obj1_links[i]))
-    for i in range(min(10, len(top10args_obj2))):
-        args_with_links.append((top10args_obj2[i], top10args_obj2_links[i]))
+    #args_with_links = []
+    #for i in range(min(10, len(top10args_obj1))):
+    #    args_with_links.append((top10args_obj1[i], top10args_obj1_links[i]))
+    #for i in range(min(10, len(top10args_obj2))):
+    #    args_with_links.append((top10args_obj2[i], top10args_obj2_links[i]))
     return {"winner":  winner, "percentage": percentage}, args_with_links
 
 # 3.3 given objects and aspect and arguments form CAM generate a text we use to put in the model
@@ -133,13 +133,21 @@ def correct_summary_and_links(summary: str, args_with_links: list[tuple[str, str
 
 # 3.6 the whole pipeline that accepts obj1, obj2 and returns the summary, percentages and links:
 
-def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str="") -> tuple[str, list[tuple[str, str]], str, float]: 
+#og method with summary
+#def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str="") -> tuple[str, list[tuple[str, str]], str, float]: 
+#    winner_data, args_with_links = extract_data_from_CAM(obj1, obj2, aspect)
+#    arguments = [arg[0] for arg in args_with_links]
+#    template = create_template(obj1, obj2, aspect, arguments)
+#    summary = predict_summary(template)
+#    summary, args_with_links = correct_summary_and_links(summary, args_with_links)
+#    return summary, args_with_links, winner_data['winner'], winner_data['percentage']
+
+def get_result_on_objs_asp(obj1: str, obj2: str, aspect: str=""):
     winner_data, args_with_links = extract_data_from_CAM(obj1, obj2, aspect)
-    arguments = [arg[0] for arg in args_with_links]
-    template = create_template(obj1, obj2, aspect, arguments)
-    summary = predict_summary(template)
-    summary, args_with_links = correct_summary_and_links(summary, args_with_links)
-    return summary, args_with_links, winner_data['winner'], winner_data['percentage']
+    return {
+        "args": args_with_links, "winner": winner_data['winner'], "percentage_winner": int(winner_data['percentage']),
+        "looser": obj2 if winner_data['winner'] == obj1 else obj1
+    }
 
  
 # 3.7 the whole pipeline that accepts the question and returns the summary, percentages and links (should have two functions (3.1 and 3.6):
@@ -148,5 +156,5 @@ def get_result_on_question(question: str) -> tuple[str, list[tuple[str, str]], s
     extracted_data = extract_objs_asp(question)
     if extracted_data == ("", "", ""):
         return "Question is not comparative!"
-    (obj1, obj2, aspect) = extracted_data #extract_objs_asp(question)
+    (obj1, obj2, aspect) = extracted_data
     return get_result_on_objs_asp(obj1, obj2, aspect)
